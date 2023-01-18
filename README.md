@@ -157,7 +157,7 @@ Examples for this can be seen at the [implementation_deps test cases](test/aspec
 ## Known limitations
 
 - If includes are added through a macro, this is invisible to DWYU.
-- Defines are OK except rare corner cases, e.g., if they are from the dependencies.
+- Defines are OK except rare corner cases, e.g., if they are from the dependencies([example](test/aspect/complex_defines)).
 - Include statements utilizing `..` to go up the directory tree are not resolved.
 
 ## Applying automatic fixes

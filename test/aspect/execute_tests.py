@@ -213,6 +213,15 @@ TESTS = [
         expected=ExpectedResult(success=True),
     ),
     TestCase(
+        name="complex_defines_a_or_b",
+        cmd=TestCmd(target="//test/aspect/complex_defines:a_or_b", aspect=DEFAULT_ASPECT),
+        expected=ExpectedResult(
+            success=False,
+            unused_public_deps=["//test/aspect/complex_defines:a"],
+            invalid_includes=["File='test/aspect/complex_defines/main.cpp', include='test/aspect/complex_defines/b.h'"],
+        ),
+    ),
+    TestCase(
         name="invalid_dependency_through_alias",
         cmd=TestCmd(target="//test/aspect/alias:use_a_transitively", aspect=DEFAULT_ASPECT),
         expected=ExpectedResult(

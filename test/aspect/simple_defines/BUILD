@@ -2,8 +2,6 @@ load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load(":defs.bzl", "if_foo")
 
-package(default_visibility = ["//visibility:public"])
-
 bool_flag(
     name = "enable_foo",
     build_setting_default = False,
