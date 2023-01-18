@@ -100,13 +100,13 @@ class TestFilterIncludes(unittest.TestCase):
 class TestGetIncludesFromFile(unittest.TestCase):
     def test_single_include(self):
         test_file = Path("src/analyze_includes/test/data/another_header.h")
-        result = get_includes_from_file(test_file)
+        result = get_includes_from_file(test_file, None)
 
         self.assertEqual(result, [Include(file=test_file, include="foo/bar.h")])
 
     def test_multiple_includes(self):
         test_file = Path("src/analyze_includes/test/data/some_header.h")
-        result = get_includes_from_file(test_file)
+        result = get_includes_from_file(test_file, None)
 
         self.assertEqual(len(result), 4)
         self.assertTrue(Include(file=test_file, include="bar.h") in result)
@@ -115,7 +115,7 @@ class TestGetIncludesFromFile(unittest.TestCase):
 
     def test_commented_includes_single_line_comments(self):
         test_file = Path("src/analyze_includes/test/data/commented_includes/single_line_comments.h")
-        result = get_includes_from_file(test_file)
+        result = get_includes_from_file(test_file, None)
 
         self.assertEqual(len(result), 2)
         self.assertTrue(Include(file=test_file, include="active_a.h") in result)
@@ -123,7 +123,7 @@ class TestGetIncludesFromFile(unittest.TestCase):
 
     def test_commented_includes_block_comments(self):
         test_file = Path("src/analyze_includes/test/data/commented_includes/block_comments.h")
-        result = get_includes_from_file(test_file)
+        result = get_includes_from_file(test_file, None)
 
         self.assertEqual(len(result), 8)
         self.assertTrue(Include(file=test_file, include="active_a.h") in result)
@@ -137,9 +137,52 @@ class TestGetIncludesFromFile(unittest.TestCase):
 
     def test_commented_includes_mixed_style(self):
         test_file = Path("src/analyze_includes/test/data/commented_includes/mixed_style.h")
-        result = get_includes_from_file(test_file)
+        result = get_includes_from_file(test_file, None)
 
         self.assertEqual(result, [Include(file=test_file, include="active.h")])
+
+    def test_if_def_conditional_includes(self):
+        test_file = Path("src/analyze_includes/test/data/conditional_includes/if_def_style.h")
+        result = get_includes_from_file(test_file, ["-DFOO"])
+        self.assertEqual(len(result), 3)
+        self.assertTrue(Include(file=test_file, include="foo.h") in result)
+        self.assertTrue(Include(file=test_file, include="bar.h") in result)
+        self.assertTrue(Include(file=test_file, include="baz.h") in result)
+
+        result = get_includes_from_file(test_file, ["-DFOO", "-U FOO"])
+        self.assertEqual(len(result), 2)
+        self.assertFalse(Include(file=test_file, include="foo.h") in result)
+        self.assertTrue(Include(file=test_file, include="bar.h") in result)
+
+        result = get_includes_from_file(test_file, ["-DNOBAR"])
+        self.assertEqual(len(result), 2)
+        self.assertTrue(Include(file=test_file, include="nobar.h") in result)
+        self.assertTrue(Include(file=test_file, include="baz.h") in result)
+
+    def test_if_defined_conditional_includes(self):
+        test_file = Path("src/analyze_includes/test/data/conditional_includes/if_defined_style.cc")
+        result = get_includes_from_file(test_file, ["-DFOO"])
+        self.assertEqual(len(result), 3)
+        self.assertTrue(Include(file=test_file, include="foo.h") in result)
+        self.assertTrue(Include(file=test_file, include="bar.h") in result)
+        self.assertTrue(Include(file=test_file, include="iostream") in result)
+
+        result = get_includes_from_file(test_file, ["-DNOBAR=1"])
+        self.assertEqual(len(result), 2)
+        self.assertTrue(Include(file=test_file, include="nobar.h") in result)
+        self.assertTrue(Include(file=test_file, include="iostream") in result)
+
+    def test_if_value_conditional_includes(self):
+        test_file = Path("src/analyze_includes/test/data/conditional_includes/if_value_style.h")
+        result = get_includes_from_file(test_file, ["-DFOO=0"])
+        self.assertEqual(len(result), 2)
+        self.assertTrue(Include(file=test_file, include="nobar.h") in result)
+        self.assertTrue(Include(file=test_file, include="baz_is_not_3.h") in result)
+
+        result = get_includes_from_file(test_file, ["-DFOO=1", "-D BAR=2", "-DBAZ=3"])
+        self.assertEqual(len(result), 2)
+        self.assertTrue(Include(file=test_file, include="foo.h") in result)
+        self.assertTrue(Include(file=test_file, include="bar2.h") in result)
 
 
 class TestGetRelevantIncludesFromFiles(unittest.TestCase):
@@ -147,6 +190,7 @@ class TestGetRelevantIncludesFromFiles(unittest.TestCase):
         result = get_relevant_includes_from_files(
             files=["src/analyze_includes/test/data/some_header.h", "src/analyze_includes/test/data/another_header.h"],
             ignored_includes=IgnoredIncludes(paths=["vector"], patterns=[]),
+            defines=None,
         )
 
         self.assertEqual(len(result), 4)

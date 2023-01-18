@@ -1,3 +1,6 @@
+load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "CPP_COMPILE_ACTION_NAME")
+load("@bazel_tools//tools/cpp:toolchain_utils.bzl", "find_cpp_toolchain")
+
 def _parse_sources_impl(sources, out_files):
     for src in sources:
         file = src.files.to_list()[0]
@@ -65,7 +68,47 @@ def _get_available_include_paths(label, system_includes, header_file):
     # Default case for single header in workspace target without any special attributes
     return [header_file.short_path]
 
-def _make_target_info(target):
+def _is_def_or_undef(flag):
+    flag = flag.lstrip()
+    return flag.startswith("-D") or flag.startswith("-U")
+
+def _toolchain_flags(ctx):
+    # NOTE(storypku):
+    # Here, we didn't take into consideration pure C or mixed C/C++ targets,
+    # and [conlyopts](https://bazel.build/rules/lib/cpp#conlyopts).
+    cc_toolchain = find_cpp_toolchain(ctx)
+    feature_configuration = cc_common.configure_features(
+        ctx = ctx,
+        cc_toolchain = cc_toolchain,
+    )
+    compile_variables = cc_common.create_compile_variables(
+        feature_configuration = feature_configuration,
+        cc_toolchain = cc_toolchain,
+        user_compile_flags = ctx.fragments.cpp.cxxopts + ctx.fragments.cpp.copts,
+    )
+    flags = cc_common.get_memory_inefficient_command_line(
+        feature_configuration = feature_configuration,
+        action_name = CPP_COMPILE_ACTION_NAME,
+        variables = compile_variables,
+    )
+
+    return [flag for flag in flags if _is_def_or_undef(flag)]
+
+def _rule_flags(target, ctx):
+    result = []
+    if hasattr(ctx.rule.attr, "copts"):
+        result = [copt for copt in ctx.rule.attr.copts if _is_def_or_undef(copt)]
+
+    compilation_context = target[CcInfo].compilation_context
+    for define in compilation_context.defines.to_list():
+        result.append("-D{}".format(define))
+
+    for define in compilation_context.local_defines.to_list():
+        result.append("-D{}".format(define))
+
+    return result
+
+def _make_target_info(target, defines):
     includes = []
     for hdr in target[CcInfo].compilation_context.direct_headers:
         inc = _get_available_include_paths(
@@ -75,7 +118,11 @@ def _make_target_info(target):
         )
         includes.extend(inc)
 
-    return struct(target = str(target.label), headers = [inc for inc in includes])
+    return struct(
+        target = str(target.label),
+        headers = [inc for inc in includes],
+        defines = defines,
+    )
 
 def _make_dep_info(dep):
     includes = []
@@ -97,7 +144,7 @@ def _make_dep_info(dep):
 
     return struct(target = str(dep.label), headers = [inc for inc in includes])
 
-def _make_headers_info(target, public_deps, private_deps):
+def _make_headers_info(target, public_deps, private_deps, defines):
     """
     Create a struct summarizing all information about the target and the dependency headers required for DWYU.
 
@@ -107,7 +154,7 @@ def _make_headers_info(target, public_deps, private_deps):
         private_deps: Direct pribate dependencies of target under inspection
     """
     return struct(
-        self = _make_target_info(target),
+        self = _make_target_info(target, defines),
         public_deps = [_make_dep_info(dep) for dep in public_deps],
         private_deps = [_make_dep_info(dep) for dep in private_deps],
     )
@@ -135,6 +182,9 @@ def dwyu_aspect_impl(target, ctx):
     if not CcInfo in target:
         return []
 
+    toolchain_defines = _toolchain_flags(ctx)
+    rule_defines = _rule_flags(target, ctx)
+
     public_deps = ctx.rule.attr.deps
     private_deps = ctx.rule.attr.implementation_deps if hasattr(ctx.rule.attr, "implementation_deps") else []
 
@@ -142,7 +192,12 @@ def dwyu_aspect_impl(target, ctx):
     target_name = _label_to_name(target.label)
     report_file = ctx.actions.declare_file("{}_dwyu_report.json".format(target_name))
     headers_info_file = ctx.actions.declare_file("{}_headers_info.json".format(target_name))
-    headers_info = _make_headers_info(target = target, public_deps = public_deps, private_deps = private_deps)
+    headers_info = _make_headers_info(
+        target = target,
+        public_deps = public_deps,
+        private_deps = private_deps,
+        defines = toolchain_defines + rule_defines,
+    )
     ctx.actions.write(headers_info_file, json.encode_indent(headers_info))
 
     args = _make_args(
@@ -154,6 +209,7 @@ def dwyu_aspect_impl(target, ctx):
         headers_info_file = headers_info_file,
         ensure_private_deps = ctx.attr._use_implementation_deps,
     )
+
     ctx.actions.run(
         executable = ctx.executable._dwyu_binary,
         inputs = [headers_info_file, ctx.file._config] + public_files + private_files,

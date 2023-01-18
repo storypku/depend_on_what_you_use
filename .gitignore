@@ -3,6 +3,8 @@
 # Bazel
 bazel-*
 .bazelrc.user
+# created via ln -s bazel-out/../../../external
+/external
 
 # Python
 __pycache__

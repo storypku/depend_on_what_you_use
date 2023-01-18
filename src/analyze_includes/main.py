@@ -5,6 +5,7 @@ from pathlib import Path
 from src.analyze_includes.evaluate_includes import evaluate_includes
 from src.analyze_includes.get_dependencies import get_available_dependencies
 from src.analyze_includes.parse_config import get_ignored_includes
+from src.analyze_includes.parse_defines import parse_defines
 from src.analyze_includes.parse_source import get_relevant_includes_from_files
 
 
@@ -45,12 +46,17 @@ def cli():
 
 def main(args: Namespace) -> int:
     ignored_includes = get_ignored_includes(args.ignored_includes_config)
+    defines = parse_defines(args.headers_info)
 
     all_includes_from_public = get_relevant_includes_from_files(
-        files=args.public_files, ignored_includes=ignored_includes
+        files=args.public_files,
+        ignored_includes=ignored_includes,
+        defines=defines,
     )
     all_includes_from_private = get_relevant_includes_from_files(
-        files=args.private_files, ignored_includes=ignored_includes
+        files=args.private_files,
+        ignored_includes=ignored_includes,
+        defines=defines,
     )
 
     allowed_includes = get_available_dependencies(args.headers_info)

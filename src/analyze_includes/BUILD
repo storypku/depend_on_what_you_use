@@ -1,13 +1,18 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("//:requirements.bzl", "requirement")
 
 py_library(
     name = "lib",
     srcs = [
         "evaluate_includes.py",
         "get_dependencies.py",
+        "parse_defines.py",
         "parse_config.py",
         "parse_source.py",
         "std_header.py",
+    ],
+    deps = [
+        requirement("libclang"),
     ],
     visibility = [":__subpackages__"],
 )
